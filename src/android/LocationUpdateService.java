@@ -357,6 +357,8 @@ public class LocationUpdateService extends Service implements LocationListener {
         if (isDebugging) {
             Toast.makeText(this, "mv:"+isMoving+",acy:"+location.getAccuracy()+",v:"+location.getSpeed()+",df:"+scaledDistanceFilter, Toast.LENGTH_LONG).show();
         }
+
+        /*
         if (isAcquiringStationaryLocation) {
             if (stationaryLocation == null || stationaryLocation.getAccuracy() > location.getAccuracy()) {
                 stationaryLocation = location;
@@ -410,6 +412,8 @@ public class LocationUpdateService extends Service implements LocationListener {
         } else if (stationaryLocation != null) {
             return;
         }
+        */
+
         // Go ahead and cache, push to server
         lastLocation = location;
         persistLocation(location);
