@@ -11,6 +11,10 @@ import android.content.Intent;
 import android.location.LocationManager;
 import android.util.Log;
 
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import org.xwalk.core.XWalkView;
+
 public class BackgroundGpsPlugin extends CordovaPlugin {
     private static final String TAG = "BackgroundGpsPlugin";
 
@@ -35,17 +39,21 @@ public class BackgroundGpsPlugin extends CordovaPlugin {
     private String notificationText = "ENABLED";
     private String stopOnTerminate = "false";
 
+    private IntentFilter filter;
+    private BroadcastReceiver receiver;
+    private XWalkView view;
+
     public boolean execute(String action, JSONArray data, CallbackContext callbackContext) {
         Activity activity = this.cordova.getActivity();
         Boolean result = false;
         updateServiceIntent = new Intent(activity, LocationUpdateService.class);
+        view = (XWalkView) this.webView.getView();
 
         if (ACTION_START.equalsIgnoreCase(action) && !isEnabled) {
             result = true;
             if (params == null || headers == null || url == null) {
                 callbackContext.error("Call configure before calling start");
             } else {
-                callbackContext.success();
                 updateServiceIntent.putExtra("url", url);
                 updateServiceIntent.putExtra("params", params);
                 updateServiceIntent.putExtra("headers", headers);
@@ -61,11 +69,43 @@ public class BackgroundGpsPlugin extends CordovaPlugin {
 
                 activity.startService(updateServiceIntent);
                 isEnabled = true;
+
+                filter = new IntentFilter();
+                // Use the 'url' to filter out intents received
+                filter.addAction(url);
+                receiver = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        if(intent != null) {
+                          String data = intent.getStringExtra("data");
+                          Log.d(TAG, "Received background location " + data);
+                          final String jsCode = "var e = new Event('backgroundLocation');" +
+                                          "e.value = '" + data + "';" +
+                                          "document.dispatchEvent(e);";
+                          BackgroundGpsPlugin.this.cordova.getActivity().runOnUiThread(new Runnable() {
+                            public void run() {
+                              view.evaluateJavascript(jsCode, null);
+                            }
+                          });
+                        }
+                    }
+                };
+
+                this.cordova.getActivity().registerReceiver(receiver, filter);
+                Log.d(TAG, "Starting to listen for: " + url);
+
+                callbackContext.success();
             }
         } else if (ACTION_STOP.equalsIgnoreCase(action)) {
             isEnabled = false;
             result = true;
             activity.stopService(updateServiceIntent);
+
+            if(receiver != null) {
+                this.cordova.getActivity().unregisterReceiver(receiver);
+                receiver = null;
+            }
+
             callbackContext.success();
         } else if (ACTION_CONFIGURE.equalsIgnoreCase(action)) {
             result = true;
@@ -84,6 +124,8 @@ public class BackgroundGpsPlugin extends CordovaPlugin {
                 this.notificationTitle = data.getString(8);
                 this.notificationText = data.getString(9);
                 this.stopOnTerminate = data.getString(11);
+
+                callbackContext.success();
             } catch (JSONException e) {
                 callbackContext.error("authToken/url required as parameters: " + e.getMessage());
             }
